@@ -89,6 +89,10 @@ Comandos detalhados
   python codex-baixaryoutube/main.py list URL [--limit N] [--out NOME.txt]
   ```
 
+  Dica de desempenho: o comando usa uma etapa rápida para coletar as URLs da
+  playlist/canal (flat) e depois resolve a data de cada vídeo individualmente,
+  exibindo progresso com `-v`. Isso dá feedback imediato mesmo em listas longas.
+
 - Baixar legendas (atalhos: `subs`, `legendas`):
 
   ```bash

@@ -104,24 +104,63 @@ def cmd_list(url: str, limit: int | None, out_path: str | None, verbose: bool = 
     url = normalize_channel_url(url)
     name = detect_name(url)
     outfile = ensure_under_data(out_path, name)
-    args = ["yt-dlp", "--skip-download"]
+    print(f"[info] Buscando URLs rapidamente (flat) em: {url}")
+    args_flat = ["yt-dlp", "--flat-playlist"]
     if limit:
-        args += ["--playlist-end", str(limit)]
-    args += ["--print", "%(upload_date)s %(webpage_url)s", url]
-    print(f"[info] Buscando datas+URLs em: {url}")
+        args_flat += ["--playlist-end", str(limit)]
+    args_flat += ["--print", "%(webpage_url)s", url]
+    rc_flat, out_flat = run_stream_collect(args_flat) if verbose else (lambda cp: (cp.returncode, cp.stdout))(run(args_flat))
+    if rc_flat != 0:
+        print("[warn] Falha em modo rápido. Tentando modo completo (pode demorar)…")
+        args_full = ["yt-dlp", "--skip-download"]
+        if limit:
+            args_full += ["--playlist-end", str(limit)]
+        args_full += ["--print", "%(upload_date)s %(webpage_url)s", url]
+        if verbose:
+            rc, stdout = run_stream_collect(args_full)
+            if rc != 0:
+                sys.exit(rc)
+            raw = stdout
+        else:
+            cp = run(args_full)
+            if cp.returncode != 0:
+                print(cp.stderr or cp.stdout, file=sys.stderr)
+                sys.exit(cp.returncode)
+            raw = cp.stdout
+        lines = [l for l in raw.splitlines() if l.strip()]
+        lines.sort(reverse=True)
+        outfile.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        print(f"[ok] Salvo: {outfile} ({len(lines)} entradas)")
+        return
+
+    urls = [u.strip() for u in out_flat.splitlines() if u.strip().startswith("http")]
     if verbose:
-        rc, stdout = run_stream_collect(args)
-        if rc != 0:
-            sys.exit(rc)
-        raw = stdout
-    else:
-        cp = run(args)
-        if cp.returncode != 0:
-            print(cp.stderr or cp.stdout, file=sys.stderr)
-            sys.exit(cp.returncode)
-        raw = cp.stdout
-    # Ordena por data decrescente (YYYYMMDD URL)
-    lines = [l for l in raw.splitlines() if l.strip()]
+        print(f"[info] {len(urls)} URLs coletadas. Resolvendo datas por vídeo…")
+
+    lines: list[str] = []
+    for i, u in enumerate(urls, start=1):
+        per_args = [
+            "yt-dlp",
+            "--skip-download",
+            "--print",
+            "%(upload_date)s %(webpage_url)s",
+            u,
+        ]
+        if verbose:
+            print(f"[info] ({i}/{len(urls)}) {u}")
+            rc, per_out = run_stream_collect(per_args)
+            if rc != 0:
+                print(f"[warn] Falha ao obter data: {u}")
+                continue
+        else:
+            cp = run(per_args)
+            if cp.returncode != 0:
+                continue
+            per_out = cp.stdout
+        for l in per_out.splitlines():
+            if l.strip():
+                lines.append(l.strip())
+
     lines.sort(reverse=True)
     outfile.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"[ok] Salvo: {outfile} ({len(lines)} entradas)")
