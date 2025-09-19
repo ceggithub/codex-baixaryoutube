@@ -1,0 +1,244 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+
+def run(cmd: list[str]) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, text=True, capture_output=True, check=False)
+
+
+def sanitize(name: str) -> str:
+    name = re.sub(r"[\s\t\r\n]+", " ", name).strip()
+    name = re.sub(r"[^\w\-\s\.]+", "_", name)
+    name = name.replace(" ", "_")
+    return name or "videos"
+
+
+def normalize_channel_url(url: str) -> str:
+    # Se for URL de canal e não terminar com /videos, tenta completar
+    if re.search(r"youtube\.com/@[A-Za-z0-9_\-\.]+/?$", url):
+        return url.rstrip("/") + "/videos"
+    return url
+
+
+def detect_name(url: str) -> str:
+    # Tenta consultar o título da playlist ou nome do canal usando yt-dlp
+    probe = run([
+        "yt-dlp",
+        "--flat-playlist",
+        "-I",
+        "1",
+        "--print",
+        "%(playlist_title)s\t%(channel)s",
+        url,
+    ])
+    if probe.returncode == 0 and probe.stdout.strip():
+        pt, ch = (probe.stdout.strip().split("\t") + [""])[:2]
+        if pt and pt.lower() != "none":
+            return sanitize(pt)
+        if ch and ch.lower() != "none":
+            return sanitize(ch)
+    # Heurísticas de fallback
+    m = re.search(r"list=([A-Za-z0-9_\-]+)", url)
+    if m:
+        return f"playlist_{m.group(1)}"
+    m = re.search(r"/@([^/]+)/?", url)
+    if m:
+        return f"channel_{sanitize(m.group(1))}"
+    return "videos"
+
+
+def data_dir() -> Path:
+    base = Path(__file__).resolve().parent / "data"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def ensure_under_data(path_like: str | None, default_name: str) -> Path:
+    base = data_dir()
+    if not path_like:
+        return base / f"{default_name}.txt"
+    p = Path(path_like)
+    # Se for caminho absoluto, respeita; se relativo, joga para data/
+    return p if p.is_absolute() else base / p
+
+
+def cmd_list(url: str, limit: int | None, out_path: str | None):
+    url = normalize_channel_url(url)
+    name = detect_name(url)
+    outfile = ensure_under_data(out_path, name)
+    args = ["yt-dlp", "--skip-download"]
+    if limit:
+        args += ["--playlist-end", str(limit)]
+    args += ["--print", "%(upload_date)s %(webpage_url)s", url]
+    print(f"[info] Buscando datas+URLs em: {url}")
+    cp = run(args)
+    if cp.returncode != 0:
+        print(cp.stderr or cp.stdout, file=sys.stderr)
+        sys.exit(cp.returncode)
+    # Ordena por data decrescente (YYYYMMDD URL)
+    lines = [l for l in cp.stdout.splitlines() if l.strip()]
+    lines.sort(reverse=True)
+    outfile.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"[ok] Salvo: {outfile} ({len(lines)} entradas)")
+
+
+def srt_to_text(srt_path: Path) -> str:
+    txt_lines: list[str] = []
+    for line in srt_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if re.match(r"^\d+$", line):
+            continue
+        if "-->" in line:
+            continue
+        if not line.strip():
+            txt_lines.append("")
+            continue
+        txt_lines.append(line)
+    # Colapsa linhas em branco múltiplas
+    out: list[str] = []
+    last_blank = False
+    for l in txt_lines:
+        if l.strip() == "":
+            if not last_blank:
+                out.append("")
+            last_blank = True
+        else:
+            out.append(l)
+            last_blank = False
+    return "\n".join(out).strip() + "\n"
+
+
+def extract_id(url: str) -> str:
+    m = re.search(r"[?&]v=([A-Za-z0-9_\-]{6,})", url)
+    if m:
+        return m.group(1)
+    m = re.search(r"youtube\.com/shorts/([A-Za-z0-9_\-]{6,})", url)
+    if m:
+        return m.group(1)
+    return sanitize(url)[:16]
+
+
+def cmd_subs(list_file: str, out_dir: str | None):
+    # Procura lista: caminho informado ou, se não existir e for relativo, tenta em data/
+    list_path = Path(list_file)
+    if not list_path.exists() and not list_path.is_absolute():
+        candidate = data_dir() / list_path
+        if candidate.exists():
+            list_path = candidate
+    if not list_path.exists():
+        print(f"[err] Lista não encontrada: {list_file}", file=sys.stderr)
+        sys.exit(1)
+
+    # Diretório de saída sempre dentro de data/ por padrão
+    outdir = Path(out_dir) if out_dir else data_dir() / list_path.stem
+    if not outdir.is_absolute():
+        outdir = data_dir() / outdir
+    tmpdir = outdir / ".tmp"
+    outdir.mkdir(parents=True, exist_ok=True)
+    tmpdir.mkdir(parents=True, exist_ok=True)
+
+    urls: list[str] = []
+    for line in list_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        parts = line.split()
+        url = parts[-1]
+        urls.append(url)
+
+    print(f"[info] Baixando legendas de {len(urls)} vídeos → {outdir}")
+    for url in urls:
+        vid = extract_id(url)
+        # Força caminho de legendas ao tmpdir e tenta manual > auto
+        args = [
+            "yt-dlp",
+            "--skip-download",
+            "--write-sub",
+            "--write-auto-sub",
+            "--sub-lang",
+            "pt",
+            "--convert-subs",
+            "srt",
+            "-P",
+            str(tmpdir),  # garante escrita no tmpdir
+            "--output",
+            f"{vid}.%(ext)s",
+            url,
+        ]
+        cp = run(args)
+        if cp.returncode != 0:
+            print(f"[warn] Falha em legendas: {url}: {(cp.stderr or '').strip()}")
+            continue
+        manual = tmpdir / f"{vid}.pt.srt"
+        auto = tmpdir / f"{vid}.auto.pt.srt"
+        chosen = manual if manual.exists() else auto if auto.exists() else None
+        if not chosen:
+            print(f"[warn] Sem legendas: {url}")
+            continue
+        txt = srt_to_text(chosen)
+        (outdir / f"{vid}.txt").write_text(txt, encoding="utf-8")
+        try:
+            chosen.unlink()
+        except Exception:
+            pass
+        print(f"[ok] {vid}.txt")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        description=(
+            "Gera lista (data URL) de canal/playlist e baixa legendas PT (manual>auto). "
+            "Uso rápido: main.py URL | main.py list URL | main.py subs LISTA.txt"
+        )
+    )
+    sub = p.add_subparsers(dest="cmd", required=False)
+
+    l = sub.add_parser("list", help="Gerar lista (YYYYMMDD URL)")
+    l.add_argument("url", help="URL do canal (/videos) ou playlist")
+    l.add_argument("--limit", type=int, default=None, help="Limite de itens")
+    l.add_argument("--out", default=None, help="Arquivo de saída .txt")
+
+    l2 = sub.add_parser("listar", help="Alias de 'list'")
+    l2.add_argument("url")
+    l2.add_argument("--limit", type=int, default=None)
+    l2.add_argument("--out", default=None)
+
+    s = sub.add_parser("subs", help="Baixar legendas PT para cada vídeo de uma lista")
+    s.add_argument("list_file", help="Arquivo de lista gerado pelo comando 'list' ou URL único")
+    s.add_argument("--out-dir", default=None, help="Diretório de saída (padrão: nome do arquivo de lista)")
+
+    s2 = sub.add_parser("legendas", help="Alias de 'subs'")
+    s2.add_argument("list_file")
+    s2.add_argument("--out-dir", default=None)
+
+    # Modo padrão: se nenhum subcomando for passado e houver apenas um argumento, trata como URL e executa 'list'.
+    p.add_argument("positional", nargs="*", help=argparse.SUPPRESS)
+    return p
+
+
+def main():
+    p = build_parser()
+    args = p.parse_args()
+
+    # Caso padrão: apenas uma URL passada sem subcomando
+    if getattr(args, "cmd", None) is None and len(args.positional) == 1:
+        url = args.positional[0]
+        if url.startswith("http://") or url.startswith("https://"):
+            return cmd_list(url=url, limit=None, out_path=None)
+
+    if args.cmd in ("list", "listar"):
+        return cmd_list(args.url, getattr(args, "limit", None), getattr(args, "out", None))
+    elif args.cmd in ("subs", "legendas"):
+        return cmd_subs(args.list_file, args.out_dir)
+
+    p.print_help()
+    sys.exit(2)
+
+
+if __name__ == "__main__":
+    main()
+

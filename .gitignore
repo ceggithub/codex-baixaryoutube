@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tools
+.idea/
+.vscode/
+
+# Outputs
+data/
+
