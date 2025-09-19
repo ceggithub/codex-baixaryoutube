@@ -80,6 +80,22 @@ Uso rápido (CLI Python)
   python codex-baixaryoutube/main.py -v subs data/<nome>.txt
   ```
 
+Opções avançadas (rede/cookies)
+-------------------------------
+
+- `--force-ipv4`: força IPv4 nas requisições do yt-dlp (útil em redes que quebram IPv6).
+- `--socket-timeout N`: define timeout de socket em segundos (ex.: 5 para falhar rápido).
+- `--cookies-from-browser chrome|edge|firefox`: usa cookies do navegador para contornar telas de consentimento/login.
+- `--proxy URL`: configura proxy HTTP/HTTPS (ex.: `http://user:pass@host:port`).
+- `--retries N`: ajusta número de tentativas do yt-dlp.
+
+Exemplos:
+
+```bash
+python -u codex-baixaryoutube/main.py -v --force-ipv4 --socket-timeout 5 list "URL" --limit 5
+python -u codex-baixaryoutube/main.py -v --cookies-from-browser chrome list "URL"
+```
+
 Comandos detalhados
 -------------------
 
