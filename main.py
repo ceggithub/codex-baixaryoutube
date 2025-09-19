@@ -45,6 +45,18 @@ def normalize_channel_url(url: str) -> str:
     return url
 
 
+def clean_url(url: str) -> str:
+    """Remove quebras de linha e espaços acidentais dentro da URL.
+    Se detectar whitespace interno, avisa no stdout e retorna versão compactada.
+    """
+    original = url
+    trimmed = url.strip()
+    if re.search(r"\s", trimmed):
+        print("[warn] URL contém quebras de linha/espaços; normalizando…")
+        trimmed = re.sub(r"\s+", "", trimmed)
+    return trimmed
+
+
 def detect_name(url: str) -> str:
     # Tenta consultar o título da playlist ou nome do canal usando yt-dlp
     probe = run([
@@ -88,6 +100,7 @@ def ensure_under_data(path_like: str | None, default_name: str) -> Path:
 
 
 def cmd_list(url: str, limit: int | None, out_path: str | None, verbose: bool = False):
+    url = clean_url(url)
     url = normalize_channel_url(url)
     name = detect_name(url)
     outfile = ensure_under_data(out_path, name)
@@ -264,7 +277,7 @@ def main():
     if getattr(args, "cmd", None) is None and len(args.positional) == 1:
         url = args.positional[0]
         if url.startswith("http://") or url.startswith("https://"):
-            return cmd_list(url=url, limit=None, out_path=None, verbose=verbose)
+            return cmd_list(url=clean_url(url), limit=None, out_path=None, verbose=verbose)
 
     if args.cmd in ("list", "listar"):
         return cmd_list(args.url, getattr(args, "limit", None), getattr(args, "out", None), verbose=verbose)
