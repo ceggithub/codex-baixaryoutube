@@ -58,6 +58,14 @@ Uso rápido (CLI Python)
   O arquivo será salvo em `codex-baixaryoutube/data/<nome>.txt`, onde `<nome>` é derivado
   automaticamente do canal/playlist (ou use `--out` para trocar o nome dentro de `data/`).
 
+- Ver o progresso (verbose):
+
+  ```bash
+  python codex-baixaryoutube/main.py -v list URL
+  # ou apenas
+  python codex-baixaryoutube/main.py -v URL
+  ```
+
 - Baixar legendas para cada vídeo a partir da lista gerada:
 
   ```bash
@@ -65,6 +73,12 @@ Uso rápido (CLI Python)
   ```
 
   As legendas são salvas em `codex-baixaryoutube/data/<nome-da-lista>/<video_id>.txt`.
+
+- Com progresso detalhado:
+
+  ```bash
+  python codex-baixaryoutube/main.py -v subs data/<nome>.txt
+  ```
 
 Comandos detalhados
 -------------------

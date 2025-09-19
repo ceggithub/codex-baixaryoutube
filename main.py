@@ -12,6 +12,25 @@ def run(cmd: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, text=True, capture_output=True, check=False)
 
 
+def run_stream_collect(cmd: list[str]) -> tuple[int, str]:
+    """Executa comando exibindo stdout em tempo real e coletando para retorno.
+    Stderr herda do processo pai (mostra progresso do yt-dlp se houver).
+    Retorna (returncode, stdout_text).
+    """
+    out_lines: list[str] = []
+    # bufsize=1 e text=True para leitura line-buffered
+    p = subprocess.Popen(cmd, text=True, stdout=subprocess.PIPE, stderr=None)
+    assert p.stdout is not None
+    try:
+        for line in p.stdout:
+            sys.stdout.write(line)
+            out_lines.append(line)
+    finally:
+        p.stdout.close()
+        rc = p.wait()
+    return rc, "".join(out_lines)
+
+
 def sanitize(name: str) -> str:
     name = re.sub(r"[\s\t\r\n]+", " ", name).strip()
     name = re.sub(r"[^\w\-\s\.]+", "_", name)
@@ -68,7 +87,7 @@ def ensure_under_data(path_like: str | None, default_name: str) -> Path:
     return p if p.is_absolute() else base / p
 
 
-def cmd_list(url: str, limit: int | None, out_path: str | None):
+def cmd_list(url: str, limit: int | None, out_path: str | None, verbose: bool = False):
     url = normalize_channel_url(url)
     name = detect_name(url)
     outfile = ensure_under_data(out_path, name)
@@ -77,12 +96,19 @@ def cmd_list(url: str, limit: int | None, out_path: str | None):
         args += ["--playlist-end", str(limit)]
     args += ["--print", "%(upload_date)s %(webpage_url)s", url]
     print(f"[info] Buscando datas+URLs em: {url}")
-    cp = run(args)
-    if cp.returncode != 0:
-        print(cp.stderr or cp.stdout, file=sys.stderr)
-        sys.exit(cp.returncode)
+    if verbose:
+        rc, stdout = run_stream_collect(args)
+        if rc != 0:
+            sys.exit(rc)
+        raw = stdout
+    else:
+        cp = run(args)
+        if cp.returncode != 0:
+            print(cp.stderr or cp.stdout, file=sys.stderr)
+            sys.exit(cp.returncode)
+        raw = cp.stdout
     # Ordena por data decrescente (YYYYMMDD URL)
-    lines = [l for l in cp.stdout.splitlines() if l.strip()]
+    lines = [l for l in raw.splitlines() if l.strip()]
     lines.sort(reverse=True)
     outfile.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"[ok] Salvo: {outfile} ({len(lines)} entradas)")
@@ -123,7 +149,7 @@ def extract_id(url: str) -> str:
     return sanitize(url)[:16]
 
 
-def cmd_subs(list_file: str, out_dir: str | None):
+def cmd_subs(list_file: str, out_dir: str | None, verbose: bool = False):
     # Procura lista: caminho informado ou, se não existir e for relativo, tenta em data/
     list_path = Path(list_file)
     if not list_path.exists() and not list_path.is_absolute():
@@ -151,8 +177,10 @@ def cmd_subs(list_file: str, out_dir: str | None):
         urls.append(url)
 
     print(f"[info] Baixando legendas de {len(urls)} vídeos → {outdir}")
-    for url in urls:
+    for idx, url in enumerate(urls, start=1):
         vid = extract_id(url)
+        if verbose:
+            print(f"[info] ({idx}/{len(urls)}) URL: {url} → {vid}")
         # Força caminho de legendas ao tmpdir e tenta manual > auto
         args = [
             "yt-dlp",
@@ -169,10 +197,16 @@ def cmd_subs(list_file: str, out_dir: str | None):
             f"{vid}.%(ext)s",
             url,
         ]
-        cp = run(args)
-        if cp.returncode != 0:
-            print(f"[warn] Falha em legendas: {url}: {(cp.stderr or '').strip()}")
-            continue
+        if verbose:
+            rc, _ = run_stream_collect(args)
+            if rc != 0:
+                print(f"[warn] Falha em legendas: {url}")
+                continue
+        else:
+            cp = run(args)
+            if cp.returncode != 0:
+                print(f"[warn] Falha em legendas: {url}: {(cp.stderr or '').strip()}")
+                continue
         manual = tmpdir / f"{vid}.pt.srt"
         auto = tmpdir / f"{vid}.auto.pt.srt"
         chosen = manual if manual.exists() else auto if auto.exists() else None
@@ -195,6 +229,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Uso rápido: main.py URL | main.py list URL | main.py subs LISTA.txt"
         )
     )
+    p.add_argument("-v", "--verbose", action="store_true", help="Exibe progresso detalhado do yt-dlp")
     sub = p.add_subparsers(dest="cmd", required=False)
 
     l = sub.add_parser("list", help="Gerar lista (YYYYMMDD URL)")
@@ -225,15 +260,16 @@ def main():
     args = p.parse_args()
 
     # Caso padrão: apenas uma URL passada sem subcomando
+    verbose = getattr(args, "verbose", False)
     if getattr(args, "cmd", None) is None and len(args.positional) == 1:
         url = args.positional[0]
         if url.startswith("http://") or url.startswith("https://"):
-            return cmd_list(url=url, limit=None, out_path=None)
+            return cmd_list(url=url, limit=None, out_path=None, verbose=verbose)
 
     if args.cmd in ("list", "listar"):
-        return cmd_list(args.url, getattr(args, "limit", None), getattr(args, "out", None))
+        return cmd_list(args.url, getattr(args, "limit", None), getattr(args, "out", None), verbose=verbose)
     elif args.cmd in ("subs", "legendas"):
-        return cmd_subs(args.list_file, args.out_dir)
+        return cmd_subs(args.list_file, args.out_dir, verbose=verbose)
 
     p.print_help()
     sys.exit(2)
@@ -241,4 +277,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
