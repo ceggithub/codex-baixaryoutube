@@ -537,6 +537,10 @@ def build_parser() -> argparse.ArgumentParser:
     s2.add_argument("list_file")
     s2.add_argument("--out-dir", default=None)
 
+    # Limpeza de artefatos em data/
+    c = sub.add_parser("clean", help="Limpa arquivos e diretórios gerados em data/")
+    c.add_argument("-y", "--yes", action="store_true", help="Não perguntar confirmação")
+
     # Modo padrão: se nenhum subcomando for passado e houver apenas um argumento, trata como URL e executa 'list'.
     p.add_argument("positional", nargs="*", help=argparse.SUPPRESS)
     return p
@@ -584,10 +588,6 @@ def main():
 
     p.print_help()
     sys.exit(2)
-
-
-    c = sub.add_parser("clean", help="Limpa arquivos e diretórios gerados em data/")
-    c.add_argument("-y", "--yes", action="store_true", help="Não perguntar confirmação")
 
 if __name__ == "__main__":
     main()
