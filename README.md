@@ -3,11 +3,13 @@ codex-baixaryoutube (CLI)
 
 Ferramenta de linha de comando para:
 
-- Principal: gerar lista de vídeos (canal ou playlist) com data e URL
-  - Formato das linhas: `YYYYMMDD URL` (ordem cronológica reversa)
-  - Arquivo gerado sempre em `data/<nome>.txt`
+- Principal: gerar rapidamente um arquivo com URLs e, em seguida, um arquivo com URL+data
+  - Fase 1 (rápida): `data/<nome>.urls.txt` com uma URL por linha
+  - Fase 2: `data/<nome>.txt` com duas colunas: `URL YYYYMMDD` (gravado incrementalmente e, ao final, ordenado por data desc)
 - Secundário: baixar legendas em português de cada vídeo listado
   - Prioriza legendas manuais; se não houver, usa automáticas
+  - Prioridade de idioma: pt > en
+  - Converte .srt ou .vtt para texto simples (não requer ffmpeg)
   - Saída: `data/<nome-da-lista>/<video_id>.txt`
 
 Pré-requisitos
@@ -55,8 +57,10 @@ Uso rápido (CLI Python)
   python codex-baixaryoutube/main.py "https://www.youtube.com/playlist?list=PLxxxx"
   ```
 
-  O arquivo será salvo em `codex-baixaryoutube/data/<nome>.txt`, onde `<nome>` é derivado
-  automaticamente do canal/playlist (ou use `--out` para trocar o nome dentro de `data/`).
+  Os arquivos serão salvos em `codex-baixaryoutube/data/` como:
+  - `<nome>.urls.txt` (primeiro, só URLs)
+  - `<nome>.txt` (depois, `URL YYYYMMDD`)
+  O `<nome>` é derivado automaticamente do canal/playlist (ou use `--out` para trocar o nome dentro de `data/`).
 
 - Ver o progresso (verbose):
 
@@ -66,13 +70,21 @@ Uso rápido (CLI Python)
   python codex-baixaryoutube/main.py -v URL
   ```
 
-- Baixar legendas para cada vídeo a partir da lista gerada:
+- Baixar legendas para cada vídeo a partir de um arquivo de lista:
 
   ```bash
+  # Pode ser o .urls.txt (apenas URLs) ou o .txt (URL+data)
   python codex-baixaryoutube/main.py subs caminho/para/sua_lista.txt
   ```
 
   As legendas são salvas em `codex-baixaryoutube/data/<nome-da-lista>/<video_id>.txt`.
+
+- Limpar arquivos gerados (data/):
+
+  ```bash
+  python codex-baixaryoutube/main.py clean  # pergunta confirmação
+  python codex-baixaryoutube/main.py clean -y  # sem confirmação
+  ```
 
 - Com progresso detalhado:
 
@@ -86,14 +98,18 @@ Opções avançadas (rede/cookies)
 - `--force-ipv4`: força IPv4 nas requisições do yt-dlp (útil em redes que quebram IPv6).
 - `--socket-timeout N`: define timeout de socket em segundos (ex.: 5 para falhar rápido).
 - `--cookies-from-browser chrome|edge|firefox`: usa cookies do navegador para contornar telas de consentimento/login.
-- `--proxy URL`: configura proxy HTTP/HTTPS (ex.: `http://user:pass@host:port`).
+- `--proxy URL`: configura proxy HTTP/HTTPS (ex.: `http://user:pass@host:port`). Passe string vazia (`""`) para desativar proxies no yt-dlp.
 - `--retries N`: ajusta número de tentativas do yt-dlp.
+- `--no-proxy`: ignora variáveis de proxy do ambiente nos subprocessos. Recomendado em WSL2 e redes corporativas onde o proxy do ambiente pode travar o YouTube.
+- `--workers N`: número de threads para resolver datas em paralelo (padrão: 4).
+- `--retry429 N` e `--retry429-initial-delay S`: retentativas com backoff exponencial quando o YouTube responder HTTP 429 (Too Many Requests).
 
 Exemplos:
 
 ```bash
-python -u codex-baixaryoutube/main.py -v --force-ipv4 --socket-timeout 5 list "URL" --limit 5
+python -u codex-baixaryoutube/main.py -v --no-proxy --force-ipv4 --socket-timeout 5 list "URL" --limit 5
 python -u codex-baixaryoutube/main.py -v --cookies-from-browser chrome list "URL"
+python -u codex-baixaryoutube/main.py -v --proxy "" list "URL"  # desativa proxy
 ```
 
 Comandos detalhados
@@ -102,12 +118,12 @@ Comandos detalhados
 - Listar (atalhos: `list`, `listar` ou passar apenas a URL):
 
   ```bash
-  python codex-baixaryoutube/main.py list URL [--limit N] [--out NOME.txt]
+  python codex-baixaryoutube/main.py list URL [--limit N] [--out NOME.txt] [--workers N] [--no-prompt]
   ```
 
-  Dica de desempenho: o comando usa uma etapa rápida para coletar as URLs da
-  playlist/canal (flat) e depois resolve a data de cada vídeo individualmente,
-  exibindo progresso com `-v`. Isso dá feedback imediato mesmo em listas longas.
+  Dica de desempenho: o comando cria primeiro `<nome>.urls.txt` imediatamente,
+  depois grava `data/<nome>.txt` de forma incremental a cada data encontrada e,
+  ao final, reordena por data desc. Você pode acelerar usando `--workers 8`.
 
 - Baixar legendas (atalhos: `subs`, `legendas`):
 
@@ -123,3 +139,9 @@ Observações
 - Em playlists extensas, use `--limit` para reduzir a quantidade processada.
 - As legendas são convertidas para texto simples, removendo numeração e timestamps.
 - Todas as saídas ficam sob `codex-baixaryoutube/data/`.
+- Em ambientes com proxy no sistema (variáveis `http_proxy`/`https_proxy`), use `--no-proxy` ou `--proxy ""` para evitar travamentos no YouTube. Se você realmente precisar do proxy, passe-o explicitamente em `--proxy URL`.
+- Ao final do comando `list`, será exibida uma pergunta interativa para baixar
+  as legendas imediatamente. O padrão é "não". Para desabilitar a pergunta
+  (ex.: uso em scripts), inclua `--no-prompt`.
+- O conversor de legendas evita duplicações comuns em VTT/SRT (roll-up), removendo
+  timestamps, índices, tags simples e linhas repetidas em janelas próximas.
