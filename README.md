@@ -98,18 +98,19 @@ Opções avançadas (rede/cookies)
 - `--force-ipv4`: força IPv4 nas requisições do yt-dlp (útil em redes que quebram IPv6).
 - `--socket-timeout N`: define timeout de socket em segundos (ex.: 5 para falhar rápido).
 - `--cookies-from-browser chrome|edge|firefox`: usa cookies do navegador para contornar telas de consentimento/login.
-- `--proxy URL`: configura proxy HTTP/HTTPS (ex.: `http://user:pass@host:port`). Passe string vazia (`""`) para desativar proxies no yt-dlp.
+- `--proxy URL`: configura proxy HTTP/HTTPS (ex.: `http://user:pass@host:port`). Por padrão o script já envia `--proxy ""`, portanto use esta flag apenas quando quiser um proxy específico.
 - `--retries N`: ajusta número de tentativas do yt-dlp.
-- `--no-proxy`: ignora variáveis de proxy do ambiente nos subprocessos. Recomendado em WSL2 e redes corporativas onde o proxy do ambiente pode travar o YouTube.
+- `--no-proxy`: mantém compatibilidade com versões anteriores (proxies já são removidos por padrão).
 - `--workers N`: número de threads para resolver datas em paralelo (padrão: 4).
 - `--retry429 N` e `--retry429-initial-delay S`: retentativas com backoff exponencial quando o YouTube responder HTTP 429 (Too Many Requests).
+- O script força o cliente `android` (`--extractor-args "youtube:player_client=android"`) nas chamadas ao yt-dlp para contornar o bloqueio SABR do YouTube. Warnings sobre `po_token` podem aparecer, mas as datas/legendas seguem sendo obtidas normalmente.
 
 Exemplos:
 
 ```bash
 python -u codex-baixaryoutube/main.py -v --no-proxy --force-ipv4 --socket-timeout 5 list "URL" --limit 5
 python -u codex-baixaryoutube/main.py -v --cookies-from-browser chrome list "URL"
-python -u codex-baixaryoutube/main.py -v --proxy "" list "URL"  # desativa proxy
+python -u codex-baixaryoutube/main.py -v --proxy "http://user:pass@host:port" list "URL"
 ```
 
 Comandos detalhados
@@ -139,7 +140,8 @@ Observações
 - Em playlists extensas, use `--limit` para reduzir a quantidade processada.
 - As legendas são convertidas para texto simples, removendo numeração e timestamps.
 - Todas as saídas ficam sob `codex-baixaryoutube/data/`.
-- Em ambientes com proxy no sistema (variáveis `http_proxy`/`https_proxy`), use `--no-proxy` ou `--proxy ""` para evitar travamentos no YouTube. Se você realmente precisar do proxy, passe-o explicitamente em `--proxy URL`.
+- Proxies de ambiente (`http_proxy`/`https_proxy`) são ignorados por padrão, evitando travamentos comuns em redes corporativas/WSL2. Quando precisar de proxy, informe-o explicitamente com `--proxy URL`.
+- Caso o YouTube passe a exigir `GVS PO Token` para alguns vídeos, siga as instruções do aviso gerado pelo yt-dlp ou consulte a [wiki](https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide).
 - Ao final do comando `list`, será exibida uma pergunta interativa para baixar
   as legendas imediatamente. O padrão é "não". Para desabilitar a pergunta
   (ex.: uso em scripts), inclua `--no-prompt`.

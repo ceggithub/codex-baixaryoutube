@@ -13,7 +13,18 @@ from pathlib import Path
 import shutil
 
 
-GLOBAL_ENV = os.environ.copy()
+PROXY_ENV_VARS = ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY")
+
+
+def env_without_proxies(base_env: dict[str, str] | None = None) -> dict[str, str]:
+    """Return a copy of the environment without standard proxy variables."""
+    env = dict(base_env or os.environ)
+    for key in PROXY_ENV_VARS:
+        env.pop(key, None)
+    return env
+
+
+GLOBAL_ENV = env_without_proxies()
 
 
 def run(cmd: list[str]) -> subprocess.CompletedProcess:
@@ -131,7 +142,14 @@ def cmd_clean(yes: bool = False, verbose: bool = False):
     print(f"[ok] Limpeza concluída. Itens removidos: {removed}")
 
 
-def ytdlp_common_args(force_ipv4: bool | None, socket_timeout: int | None, cookies_from_browser: str | None, proxy: str | None, retries: int | None) -> list[str]:
+def ytdlp_common_args(
+    force_ipv4: bool | None,
+    socket_timeout: int | None,
+    cookies_from_browser: str | None,
+    proxy: str | None,
+    retries: int | None,
+    player_client: str | None = None,
+) -> list[str]:
     # Sempre ignora configurações globais do yt-dlp para ambiente reprodutível
     args: list[str] = ["--ignore-config"]
     if force_ipv4:
@@ -145,6 +163,8 @@ def ytdlp_common_args(force_ipv4: bool | None, socket_timeout: int | None, cooki
     # Se proxy for string vazia, ainda queremos passar explicitamente para desativar proxies do yt-dlp
     if proxy == "":
         args += ["--proxy", ""]
+    if player_client:
+        args += ["--extractor-args", f"youtube:player_client={player_client}"]
     if retries is not None:
         args += ["--retries", str(retries)]
     return args
@@ -177,7 +197,14 @@ def cmd_list(url: str, limit: int | None, out_path: str | None, verbose: bool = 
     rc_flat, out_flat = run_stream_collect(args_flat) if verbose else (lambda cp: (cp.returncode, cp.stdout))(run(args_flat))
     if rc_flat != 0:
         print("[warn] Falha em modo rápido. Tentando modo completo (pode demorar)…")
-        args_full = ["yt-dlp", "--skip-download"] + ytdlp_common_args(force_ipv4, socket_timeout, cookies_from_browser, proxy, retries)
+        args_full = ["yt-dlp", "--skip-download"] + ytdlp_common_args(
+            force_ipv4,
+            socket_timeout,
+            cookies_from_browser,
+            proxy,
+            retries,
+            player_client="android",
+        )
         if limit:
             args_full += ["--playlist-end", str(limit)]
         args_full += ["--print", "%(upload_date)s %(webpage_url)s", url]
@@ -264,7 +291,14 @@ def cmd_list(url: str, limit: int | None, out_path: str | None, verbose: bool = 
             "%(upload_date)s %(webpage_url)s",
             u,
         ]
-        per_args = per_args[:1] + ytdlp_common_args(force_ipv4, socket_timeout, cookies_from_browser, proxy, retries) + per_args[1:]
+        per_args = per_args[:1] + ytdlp_common_args(
+            force_ipv4,
+            socket_timeout,
+            cookies_from_browser,
+            proxy,
+            retries,
+            player_client="android",
+        ) + per_args[1:]
         if verbose:
             print(f"[info] [queue] {u}")
             maybe_print_cmd(verbose, per_args)
@@ -453,7 +487,14 @@ def cmd_subs(list_file: str, out_dir: str | None, verbose: bool = False,
             f"{vid}.%(ext)s",
             url,
         ]
-        args = args[:1] + ytdlp_common_args(force_ipv4, socket_timeout, cookies_from_browser, proxy, retries) + args[1:]
+        args = args[:1] + ytdlp_common_args(
+            force_ipv4,
+            socket_timeout,
+            cookies_from_browser,
+            proxy,
+            retries,
+            player_client="android",
+        ) + args[1:]
         if verbose:
             maybe_print_cmd(verbose, args)
         # Executa com backoff para HTTP 429
@@ -552,26 +593,18 @@ def main():
 
     # Caso padrão: apenas uma URL passada sem subcomando
     verbose = getattr(args, "verbose", False)
-    # Ambiente dos subprocessos: por padrão, removemos proxies do ambiente se o usuário
-    # explicitou proxy (incluindo vazio) ou pediu --no-proxy. Caso contrário, herdamos o ambiente.
+    # Ambiente dos subprocessos: por padrão, removemos proxies do ambiente.
     global GLOBAL_ENV
-    def env_without_proxies() -> dict[str, str]:
-        env = os.environ.copy()
-        for k in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"):
-            if k in env:
-                env.pop(k, None)
-        return env
-
-    if getattr(args, "no_proxy", False) or (getattr(args, "proxy", None) is not None):
-        GLOBAL_ENV = env_without_proxies()
-    else:
-        GLOBAL_ENV = os.environ.copy()
+    effective_proxy = args.proxy if args.proxy is not None else ""
+    if getattr(args, "no_proxy", False):
+        effective_proxy = ""
+    GLOBAL_ENV = env_without_proxies()
 
     common = dict(
         force_ipv4=args.force_ipv4,
         socket_timeout=args.socket_timeout,
         cookies_from_browser=args.cookies_from_browser,
-        proxy=args.proxy,
+        proxy=effective_proxy,
         retries=args.retries,
     )
     if getattr(args, "cmd", None) is None and len(args.positional) == 1:
