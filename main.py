@@ -13,7 +13,14 @@ from pathlib import Path
 import shutil
 
 
-PROXY_ENV_VARS = ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY")
+PROXY_ENV_VARS = (
+    "http_proxy",
+    "https_proxy",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "all_proxy",
+    "ALL_PROXY",
+)
 
 
 def env_without_proxies(base_env: dict[str, str] | None = None) -> dict[str, str]:
@@ -267,18 +274,18 @@ def cmd_list(url: str, limit: int | None, out_path: str | None, verbose: bool = 
         print(f"[info] Gravando incrementalmente em: {outfile}")
 
     def run_with_backoff(cmd: list[str]) -> subprocess.CompletedProcess:
-        attempts = max(1, (retry429 or 1) + 1)  # base try + retry429 times
+        retries_left = max(0, retry429 or 0)
         delay = max(0.1, retry429_initial_delay)
         last = run(cmd)
         def is_429(cp: subprocess.CompletedProcess) -> bool:
             txt = (cp.stderr or "") + "\n" + (cp.stdout or "")
             txt_low = txt.lower()
             return cp.returncode != 0 and ("429" in txt_low or "too many requests" in txt_low)
-        while attempts > 0 and is_429(last):
+        while retries_left > 0 and is_429(last):
             time.sleep(delay)
             delay *= 2
             last = run(cmd)
-            attempts -= 1
+            retries_left -= 1
         return last
 
     pairs: list[tuple[str, str]] = []  # (url, date)
@@ -442,31 +449,39 @@ def cmd_subs(list_file: str, out_dir: str | None, verbose: bool = False,
              retries: int | None = None,
              retry429: int | None = 2,
              retry429_initial_delay: float = 1.0):
-    # Procura lista: caminho informado ou, se não existir e for relativo, tenta em data/
-    list_path = Path(list_file)
-    if not list_path.exists() and not list_path.is_absolute():
-        candidate = data_dir() / list_path
-        if candidate.exists():
-            list_path = candidate
-    if not list_path.exists():
-        print(f"[err] Lista não encontrada: {list_file}", file=sys.stderr)
-        sys.exit(1)
+    urls: list[str] = []
+    single_url = clean_url(list_file)
+    is_single_url = single_url.startswith("http://") or single_url.startswith("https://")
+    list_stem = ""
+
+    if is_single_url:
+        urls = [single_url]
+        list_stem = f"single_{extract_id(single_url)}"
+    else:
+        # Procura lista: caminho informado ou, se não existir e for relativo, tenta em data/
+        list_path = Path(list_file)
+        if not list_path.exists() and not list_path.is_absolute():
+            candidate = data_dir() / list_path
+            if candidate.exists():
+                list_path = candidate
+        if not list_path.exists():
+            print(f"[err] Lista não encontrada: {list_file}", file=sys.stderr)
+            sys.exit(1)
+        list_stem = list_path.stem
+        for line in list_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            parts = line.split()
+            url = next((t for t in parts if t.startswith("http://") or t.startswith("https://")), parts[-1])
+            urls.append(url)
 
     # Diretório de saída sempre dentro de data/ por padrão
-    outdir = Path(out_dir) if out_dir else data_dir() / list_path.stem
+    outdir = Path(out_dir) if out_dir else data_dir() / list_stem
     if not outdir.is_absolute():
         outdir = data_dir() / outdir
     tmpdir = outdir / ".tmp"
     outdir.mkdir(parents=True, exist_ok=True)
     tmpdir.mkdir(parents=True, exist_ok=True)
-
-    urls: list[str] = []
-    for line in list_path.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        parts = line.split()
-        url = next((t for t in parts if t.startswith("http://") or t.startswith("https://")), parts[-1])
-        urls.append(url)
 
     print(f"[info] Baixando legendas de {len(urls)} vídeos → {outdir}")
     for idx, url in enumerate(urls, start=1):
@@ -498,20 +513,20 @@ def cmd_subs(list_file: str, out_dir: str | None, verbose: bool = False,
         if verbose:
             maybe_print_cmd(verbose, args)
         # Executa com backoff para HTTP 429
-        attempts = max(1, (retry429 or 1) + 1)
+        retries_left = max(0, retry429 or 0)
         delay = max(0.1, retry429_initial_delay)
         cp = run(args)
         def is_429(cp: subprocess.CompletedProcess) -> bool:
             txt = (cp.stderr or "") + "\n" + (cp.stdout or "")
             low = txt.lower()
             return cp.returncode != 0 and ("429" in low or "too many requests" in low)
-        while attempts > 0 and is_429(cp):
+        while retries_left > 0 and is_429(cp):
             if verbose:
                 print(f"[info] HTTP 429 detectado. Repetindo após {delay:.1f}s…")
             time.sleep(delay)
             delay *= 2
             cp = run(args)
-            attempts -= 1
+            retries_left -= 1
         rc = cp.returncode
         # Preferência: manual PT > auto PT > manual EN > auto EN; prefere .srt, senão .vtt
         candidates = [

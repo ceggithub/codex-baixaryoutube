@@ -79,6 +79,14 @@ Uso rápido (CLI Python)
 
   As legendas são salvas em `codex-baixaryoutube/data/<nome-da-lista>/<video_id>.txt`.
 
+- Baixar legenda de uma URL única (sem arquivo de lista):
+
+  ```bash
+  python codex-baixaryoutube/main.py subs "https://www.youtube.com/watch?v=VIDEO_ID"
+  ```
+
+  Saída padrão: `codex-baixaryoutube/data/single_<video_id>/`.
+
 - Limpar arquivos gerados (data/):
 
   ```bash
