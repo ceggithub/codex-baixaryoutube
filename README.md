@@ -1,4 +1,4 @@
-codex-baixaryoutube (CLI)
+BaixarYoutubeInfo (CLI)
 ==============================
 
 Ferramenta de linha de comando para:
@@ -27,7 +27,7 @@ Ambiente (venv)
    - Linux/macOS:
 
      ```bash
-     cd codex-baixaryoutube
+     cd BaixarYoutubeInfo
      python3 -m venv .venv
      source .venv/bin/activate
      ```
@@ -35,7 +35,7 @@ Ambiente (venv)
    - Windows (PowerShell):
 
      ```powershell
-     cd codex-baixaryoutube
+     cd BaixarYoutubeInfo
      py -m venv .venv
      .venv\Scripts\Activate.ps1
      ```
@@ -52,12 +52,12 @@ Uso rápido (CLI Python)
 - Gerar lista passando a URL do canal (página /videos) ou de uma playlist:
 
   ```bash
-  python codex-baixaryoutube/main.py "https://www.youtube.com/@canal/videos"
+  python BaixarYoutubeInfo/main.py "https://www.youtube.com/@canal/videos"
   # ou
-  python codex-baixaryoutube/main.py "https://www.youtube.com/playlist?list=PLxxxx"
+  python BaixarYoutubeInfo/main.py "https://www.youtube.com/playlist?list=PLxxxx"
   ```
 
-  Os arquivos serão salvos em `codex-baixaryoutube/data/` como:
+  Os arquivos serão salvos em `BaixarYoutubeInfo/data/` como:
   - `<nome>.urls.txt` (primeiro, só URLs)
   - `<nome>.txt` (depois, `URL YYYYMMDD`)
   O `<nome>` é derivado automaticamente do canal/playlist (ou use `--out` para trocar o nome dentro de `data/`).
@@ -65,39 +65,39 @@ Uso rápido (CLI Python)
 - Ver o progresso (verbose):
 
   ```bash
-  python codex-baixaryoutube/main.py -v list URL
+  python BaixarYoutubeInfo/main.py -v list URL
   # ou apenas
-  python codex-baixaryoutube/main.py -v URL
+  python BaixarYoutubeInfo/main.py -v URL
   ```
 
 - Baixar legendas para cada vídeo a partir de um arquivo de lista:
 
   ```bash
   # Pode ser o .urls.txt (apenas URLs) ou o .txt (URL+data)
-  python codex-baixaryoutube/main.py subs caminho/para/sua_lista.txt
+  python BaixarYoutubeInfo/main.py subs caminho/para/sua_lista.txt
   ```
 
-  As legendas são salvas em `codex-baixaryoutube/data/<nome-da-lista>/<video_id>.txt`.
+  As legendas são salvas em `BaixarYoutubeInfo/data/<nome-da-lista>/<video_id>.txt`.
 
 - Baixar legenda de uma URL única (sem arquivo de lista):
 
   ```bash
-  python codex-baixaryoutube/main.py subs "https://www.youtube.com/watch?v=VIDEO_ID"
+  python BaixarYoutubeInfo/main.py subs "https://www.youtube.com/watch?v=VIDEO_ID"
   ```
 
-  Saída padrão: `codex-baixaryoutube/data/single_<video_id>/`.
+  Saída padrão: `BaixarYoutubeInfo/data/single_<video_id>/`.
 
 - Limpar arquivos gerados (data/):
 
   ```bash
-  python codex-baixaryoutube/main.py clean  # pergunta confirmação
-  python codex-baixaryoutube/main.py clean -y  # sem confirmação
+  python BaixarYoutubeInfo/main.py clean  # pergunta confirmação
+  python BaixarYoutubeInfo/main.py clean -y  # sem confirmação
   ```
 
 - Com progresso detalhado:
 
   ```bash
-  python codex-baixaryoutube/main.py -v subs data/<nome>.txt
+  python BaixarYoutubeInfo/main.py -v subs data/<nome>.txt
   ```
 
 Opções avançadas (rede/cookies)
@@ -116,9 +116,9 @@ Opções avançadas (rede/cookies)
 Exemplos:
 
 ```bash
-python -u codex-baixaryoutube/main.py -v --no-proxy --force-ipv4 --socket-timeout 5 list "URL" --limit 5
-python -u codex-baixaryoutube/main.py -v --cookies-from-browser chrome list "URL"
-python -u codex-baixaryoutube/main.py -v --proxy "http://user:pass@host:port" list "URL"
+python -u BaixarYoutubeInfo/main.py -v --no-proxy --force-ipv4 --socket-timeout 5 list "URL" --limit 5
+python -u BaixarYoutubeInfo/main.py -v --cookies-from-browser chrome list "URL"
+python -u BaixarYoutubeInfo/main.py -v --proxy "http://user:pass@host:port" list "URL"
 ```
 
 Comandos detalhados
@@ -127,7 +127,7 @@ Comandos detalhados
 - Listar (atalhos: `list`, `listar` ou passar apenas a URL):
 
   ```bash
-  python codex-baixaryoutube/main.py list URL [--limit N] [--out NOME.txt] [--workers N] [--no-prompt]
+  python BaixarYoutubeInfo/main.py list URL [--limit N] [--out NOME.txt] [--workers N] [--no-prompt]
   ```
 
   Dica de desempenho: o comando cria primeiro `<nome>.urls.txt` imediatamente,
@@ -137,7 +137,7 @@ Comandos detalhados
 - Baixar legendas (atalhos: `subs`, `legendas`):
 
   ```bash
-  python codex-baixaryoutube/main.py subs LISTA.txt [--out-dir DIRETORIO]
+  python BaixarYoutubeInfo/main.py subs LISTA.txt [--out-dir DIRETORIO]
   ```
 
 Observações
@@ -147,7 +147,7 @@ Observações
   informar apenas a raiz do canal (`/@nome`), o programa completa para `/videos`.
 - Em playlists extensas, use `--limit` para reduzir a quantidade processada.
 - As legendas são convertidas para texto simples, removendo numeração e timestamps.
-- Todas as saídas ficam sob `codex-baixaryoutube/data/`.
+- Todas as saídas ficam sob `BaixarYoutubeInfo/data/`.
 - Proxies de ambiente (`http_proxy`/`https_proxy`) são ignorados por padrão, evitando travamentos comuns em redes corporativas/WSL2. Quando precisar de proxy, informe-o explicitamente com `--proxy URL`.
 - Caso o YouTube passe a exigir `GVS PO Token` para alguns vídeos, siga as instruções do aviso gerado pelo yt-dlp ou consulte a [wiki](https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide).
 - Ao final do comando `list`, será exibida uma pergunta interativa para baixar
