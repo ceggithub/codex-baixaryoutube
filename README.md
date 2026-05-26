@@ -155,3 +155,9 @@ Observações
   (ex.: uso em scripts), inclua `--no-prompt`.
 - O conversor de legendas evita duplicações comuns em VTT/SRT (roll-up), removendo
   timestamps, índices, tags simples e linhas repetidas em janelas próximas.
+
+Histórico de Versões
+--------------------
+
+- **Correção de perda de linhas em legendas (Maio/2026):**
+  - Corrigido bug em que a heurística de deduplicação selecionava apenas a linha mais longa de cada bloco de legenda (cue) via `max(..., key=len)`, descartando linhas secundárias em diálogos manuais ou atualizações incrementais em legendas automáticas. O processamento agora analisa e deduplica cada linha individualmente.

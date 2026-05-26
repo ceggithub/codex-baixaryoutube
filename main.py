@@ -388,22 +388,22 @@ def srt_to_text(srt_path: Path) -> str:
         cue_buf = []
         if not clean_lines:
             return
-        # Heurística de roll-up: escolha a linha mais longa do cue
-        cue_text = max(clean_lines, key=len)
-        cue_text = html.unescape(cue_text).strip()
-        if not cue_text:
-            return
-        # Dedup: evita repetir a mesma legenda em janelas recentes
-        recent = window[-5:]
-        if cue_text in recent:
-            return
-        # Evita duplicar exatamente a última linha
-        if out_texts and cue_text == out_texts[-1]:
-            return
-        out_texts.append(cue_text)
-        window.append(cue_text)
-        if len(window) > 10:
-            window = window[-10:]
+        # Processa cada linha individualmente, aplicando deduplicação
+        for cue_text in clean_lines:
+            cue_text = html.unescape(cue_text).strip()
+            if not cue_text:
+                continue
+            # Dedup: evita repetir a mesma legenda em janelas recentes
+            recent = window[-5:]
+            if cue_text in recent:
+                continue
+            # Evita duplicar exatamente a última linha
+            if out_texts and cue_text == out_texts[-1]:
+                continue
+            out_texts.append(cue_text)
+            window.append(cue_text)
+            if len(window) > 10:
+                window = window[-10:]
 
     for raw in lines + [""]:  # sentinela para flush final
         line = raw.rstrip("\n")
