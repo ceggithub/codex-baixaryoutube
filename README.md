@@ -1,3 +1,7 @@
+> **⚠️ REPOSITÓRIO DEPRECADO**
+> Este projeto foi substituído por **[DadosYoutube](https://github.com/ceggithub/DadosYoutube)**, que oferece todas as funcionalidades deste repositório mais cache incremental, YouTube Data API v3, download paralelo, volumes para IA e dashboard HTML.
+> Este repositório está arquivado e não receberá mais atualizações.
+
 BaixarYoutubeInfo (CLI)
 ==============================
 
